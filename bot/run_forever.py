@@ -48,6 +48,19 @@ def acquire_single_instance_lock() -> bool:
         return False
 
 
+def open_crash_log():
+    """Open the bot crash log for appending.
+
+    Must append (not truncate): restarting the bot right after a crash
+    would otherwise erase the very traceback we are trying to capture.
+    Rotates to *.old once it grows past 512 KB.
+    """
+    CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    if CRASH_LOG.exists() and CRASH_LOG.stat().st_size > 512_000:
+        CRASH_LOG.replace(CRASH_LOG.with_name(CRASH_LOG.name + ".old"))
+    return open(CRASH_LOG, "ab")
+
+
 def main() -> None:
     setup_logging()
     if not acquire_single_instance_lock():
@@ -61,8 +74,7 @@ def main() -> None:
         try:
             # Capture the bot's stdout/stderr so crash tracebacks are not
             # lost (pythonw has no console, they would otherwise vanish).
-            CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
-            with open(CRASH_LOG, "wb") as errf:
+            with open_crash_log() as errf:
                 errf.write(f"--- bot start {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n".encode())
                 errf.flush()
                 rc = subprocess.call(
