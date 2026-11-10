@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import os
+import sys
+from logging.handlers import RotatingFileHandler
 
 import aiohttp
 from aiohttp import web
@@ -23,12 +25,42 @@ from .handlers import router
 # Load environment
 load_dotenv()
 
-# Configure logging
+# Configure logging: always to a file (the bot may run with pythonw, which
+# has no console), plus console output when one is attached.
+LOG_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+LOG_FILE = os.path.join(LOG_DIR, "bot.log")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+_handlers: list[logging.Handler] = [
+    RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8"),
+]
+if sys.stderr is not None:  # pythonw.exe has no console
+    _handlers.append(logging.StreamHandler())
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
+
+
+def prevent_system_sleep() -> None:
+    """On Windows, keep the machine awake while the bot is running.
+
+    Uses SetThreadExecutionState: no permanent power-settings changes; the
+    previous behaviour returns as soon as the bot exits. Does not override
+    an explicit user action (sleep button / lid close).
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
+        logger.info("System sleep prevention enabled (bot keeps laptop awake)")
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not enable sleep prevention", exc_info=True)
 
 
 async def start_health_server() -> None:
@@ -110,6 +142,9 @@ async def main() -> None:
 
     # Bot
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+
+    # Keep the laptop awake while the bot is running (Windows only, no-op elsewhere)
+    prevent_system_sleep()
 
     # Restore the database backup when running on Hugging Face
     if hf_storage.is_enabled():
