@@ -1,0 +1,13 @@
+# Secrets - never commit
+.env
+
+# Local database
+data/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Deployment helper (runs locally only)
+deploy_to_hf.py

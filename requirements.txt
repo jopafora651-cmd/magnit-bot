@@ -1,0 +1,5 @@
+aiogram==3.31
+aiosqlite
+aiohttp
+python-dotenv
+huggingface_hub
